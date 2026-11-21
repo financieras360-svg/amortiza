@@ -1,0 +1,7 @@
+# Colores de Streamlit con la paleta de "amortiza"
+[theme]
+primaryColor = "#EC111A"
+backgroundColor = "#FFFFFF"
+secondaryBackgroundColor = "#F6F6F6"
+textColor = "#1D1D1D"
+font = "sans serif"
