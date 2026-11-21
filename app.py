@@ -102,14 +102,23 @@ def html(contenido):
     st.html(contenido)
 
 
+def llave(nombre):
+    """
+    Llave de cada control con la "versión" actual. Al restablecer, la versión
+    sube y todos los controles nacen de nuevo con sus valores iniciales
+    (borrar las llaves no basta: algunos controles recuerdan su opción).
+    """
+    return "{}_v{}".format(nombre, st.session_state.get("version", 0))
+
+
 def restablecer():
-    """Borra todo lo capturado: Streamlit vuelve a los valores iniciales."""
-    for llave in list(st.session_state.keys()):
-        del st.session_state[llave]
+    """Vuelve todo a los valores iniciales del Excel."""
+    st.session_state.version = st.session_state.get("version", 0) + 1
+    st.session_state.prepagos = {}
 
 
-def agregar_prepago(llave_mes):
-    mes, monto = int(st.session_state[llave_mes]), float(st.session_state.prep_monto)
+def agregar_prepago(llave_mes, llave_monto):
+    mes, monto = int(st.session_state[llave_mes]), float(st.session_state[llave_monto])
     if monto > 0:
         st.session_state.prepagos[mes] = st.session_state.prepagos.get(mes, 0) + monto
 
@@ -140,6 +149,7 @@ EXPLICACION_AVISO = {
 
 # Lo que se guarda entre corridas
 st.session_state.setdefault("prepagos", {})
+st.session_state.setdefault("version", 0)
 
 
 # =============================================================================
@@ -161,17 +171,17 @@ with vista_calc:
     # ---------------------------------------------------------------- PASO 1
     html(paso(1, "¿Desde dónde quieres calcular?"))
     modo = st.segmented_control("Modo de cálculo", list(MODOS), format_func=MODOS.get,
-                                default="valor", key="modo", label_visibility="collapsed") or "valor"
+                                default="valor", key=llave("modo"), label_visibility="collapsed") or "valor"
     if modo == "mensualidad":
         st.caption("Función nueva: no existe en el Excel. Busca el crédito cuya mensualidad del mes 1 sea la que escribas.")
 
     # ---------------------------------------------------------------- PASO 2
     html(paso(2, "¿Para qué es tu crédito?"))
     destino = st.segmented_control("Destino", list(DESTINOS), format_func=DESTINOS.get,
-                                   default="compra", key="destino", label_visibility="collapsed") or "compra"
+                                   default="compra", key=llave("destino"), label_visibility="collapsed") or "compra"
     opciones_mod = list(PRODUCTO_DE[destino])
     modalidad = st.segmented_control("Modalidad", opciones_mod, format_func=MODALIDADES.get,
-                                     default="normal", key="modalidad_" + destino) or "normal"
+                                     default="normal", key=llave("modalidad_" + destino)) or "normal"
     producto = PRODUCTO_DE[destino][modalidad]
     datos_prod = parametros.PRODUCTOS[producto]
 
@@ -182,29 +192,29 @@ with vista_calc:
         html(paso(3, "Completa tus datos"))
 
         principal = st.number_input(PREGUNTA_PRINCIPAL[modo], min_value=0.0, step=10_000.0 if modo != "mensualidad" else 500.0,
-                                    value=VALOR_INICIAL[modo], format="%.2f", key="principal_" + modo)
+                                    value=VALOR_INICIAL[modo], format="%.2f", key=llave("principal_" + modo))
         st.caption("= " + money(principal))
         lugar_aviso_principal = st.empty()          # aquí se ponen los avisos de este dato
 
         esquema = st.segmented_control("¿Cómo quieres pagar?", ["Pagos Oportunos", "Valora"],
-                                       default="Pagos Oportunos", key="esquema") or "Pagos Oportunos"
+                                       default="Pagos Oportunos", key=llave("esquema")) or "Pagos Oportunos"
         st.caption("Pago fijo; la tasa baja si pagas a tiempo." if esquema == "Pagos Oportunos"
                    else "Empiezas pagando menos y la mensualidad sube cada año.")
 
         plazos = parametros.PLAZOS_PAGOS_OPORTUNOS if esquema == "Pagos Oportunos" else parametros.PLAZOS_VALORA
         plazo = st.segmented_control("¿Cuánto tiempo necesitas para pagar?", plazos, default=20,
-                                     format_func=lambda p: "{} años".format(p), key="plazo_" + esquema) or 20
+                                     format_func=lambda p: "{} años".format(p), key=llave("plazo_" + esquema)) or 20
 
         nivel = "1"
         if esquema == "Valora":
             nivel = st.segmented_control("Nivel de tasa (tu perfil de riesgo)", parametros.NIVELES_DE_TASA,
-                                         default="1", key="nivel") or "1"
+                                         default="1", key=llave("nivel")) or "1"
             st.caption("1 es el mejor perfil y R el de mayor riesgo."
                        + (" Con nivel R el monto máximo de política es de 7 millones." if nivel == "R" else ""))
 
         if producto in (1, 4, 6):
             actividad = st.segmented_control("¿Cómo recibes tus ingresos?", ["Empleado", "Independiente"],
-                                             default="Empleado", key="actividad") or "Empleado"
+                                             default="Empleado", key=llave("actividad")) or "Empleado"
         else:
             actividad = "Independiente" if producto == 7 else "Empleado"
             st.caption("Actividad: **{}** (fija para este producto).".format(actividad))
@@ -215,7 +225,7 @@ with vista_calc:
         else:
             pena = datos_prod["penalizacion_prepago"]
             tipo_comision = st.radio(
-                "¿Cuándo pagas la comisión?", ["Pago anticipado", "Contratación"], key="comision", horizontal=True,
+                "¿Cuándo pagas la comisión?", ["Pago anticipado", "Contratación"], key=llave("comision"), horizontal=True,
                 format_func=lambda t: "Pago anticipado" if t == "Pago anticipado" else "Por contratación",
                 captions=["No pagas comisión al firmar." + (" Si abonas antes, pagas 3 % + IVA." if pena else ""),
                           "Pagas {} al firmar. Si abonas antes, no hay penalización.".format(pct(datos_prod["comision_apertura"]))])
@@ -227,46 +237,46 @@ with vista_calc:
         lugar_infonavit_7 = None
         if producto in (2, 5):
             sueldo = st.number_input("Sueldo de cotización (Apoyo Infonavit)", min_value=0.0, value=30_000.0,
-                                     step=1_000.0, format="%.2f", key="sueldo")
+                                     step=1_000.0, format="%.2f", key=llave("sueldo"))
             st.caption("Tu patrón aporta 5 % bimestral (tope $8,915.56) y se abona a tu deuda cada 2 meses.")
         if producto == 3:
-            ssv_t = st.number_input("Tu subcuenta de vivienda", min_value=0.0, value=0.0, step=10_000.0, key="ssv_t")
-            cinf_t = st.number_input("Tu crédito Infonavit", min_value=0.0, value=0.0, step=10_000.0, key="cinf_t",
+            ssv_t = st.number_input("Tu subcuenta de vivienda", min_value=0.0, value=0.0, step=10_000.0, key=llave("ssv_t"))
+            cinf_t = st.number_input("Tu crédito Infonavit", min_value=0.0, value=0.0, step=10_000.0, key=llave("cinf_t"),
                                      help="Aquí debes capturar el Crédito Neto (Anexo B) cuando se tenga el dato.")
-            con_conyuge = st.checkbox("Sumar a mi cónyuge", key="conyuge3")
+            con_conyuge = st.checkbox("Sumar a mi cónyuge", key=llave("conyuge3"))
             if con_conyuge:
-                ssv_c = st.number_input("Subcuenta de vivienda del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key="ssv_c3")
-                cinf_c = st.number_input("Crédito Infonavit del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key="cinf_c3")
+                ssv_c = st.number_input("Subcuenta de vivienda del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key=llave("ssv_c3"))
+                cinf_c = st.number_input("Crédito Infonavit del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key=llave("cinf_c3"))
         if producto == 7:
-            ssv_t = st.number_input("Tu subcuenta de vivienda", min_value=0.0, value=0.0, step=10_000.0, key="ssv_t7")
+            ssv_t = st.number_input("Tu subcuenta de vivienda", min_value=0.0, value=0.0, step=10_000.0, key=llave("ssv_t7"))
             lugar_infonavit_7 = st.empty()          # el crédito Infonavit se calcula; se muestra después
-            con_conyuge = st.checkbox("Sumar a mi cónyuge", key="conyuge7")
+            con_conyuge = st.checkbox("Sumar a mi cónyuge", key=llave("conyuge7"))
             if con_conyuge:
-                ssv_c = st.number_input("Subcuenta de vivienda del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key="ssv_c7")
+                ssv_c = st.number_input("Subcuenta de vivienda del cónyuge", min_value=0.0, value=0.0, step=10_000.0, key=llave("ssv_c7"))
             st.caption("* El monto del crédito aplica para el acreditado y conyuge, en su caso.")
         if producto in (4, 5):
             financiar = (st.segmented_control("¿Sumar los gastos notariales a tu crédito? (6 %)", ["Sí", "No"],
-                                              default="Sí", key="fin_gastos") or "Sí") == "Sí"
+                                              default="Sí", key=llave("fin_gastos")) or "Sí") == "Sí"
 
         # Ajustes avanzados (opcionales)
         with st.expander("Ajustes avanzados (opcional): promoción, gastos, seguros, fecha"):
             st.caption("Ya usamos los valores más comunes. Cámbialos solo si tienes una promoción, otros gastos o seguros propios.")
             campanas = [c for c in parametros.CAMPANAS if producto == 1 or c not in parametros.CAMPANAS_SOLO_PRODUCTO_1]
             a1, a2 = st.columns(2)
-            campana = a1.selectbox("Promoción (campaña)", campanas, key="campana_{}".format(len(campanas)))
-            fecha = a2.date_input("Fecha de cálculo", value=date.today(), format="DD/MM/YYYY", key="fecha",
+            campana = a1.selectbox("Promoción (campaña)", campanas, key=llave("campana_{}".format(len(campanas))))
+            fecha = a2.date_input("Fecha de cálculo", value=date.today(), format="DD/MM/YYYY", key=llave("fecha"),
                                   help="Entre el día 3 y el 16 pagas el día 3; si no, el día 17.")
-            pct_imp = a1.number_input("% de impuestos y derechos", min_value=0.0, max_value=20.0, value=3.0, step=0.25, key="pct_imp")
-            pct_hon = a2.number_input("% de honorarios notariales", min_value=0.0, max_value=20.0, value=2.0, step=0.25, key="pct_hon")
+            pct_imp = a1.number_input("% de impuestos y derechos", min_value=0.0, max_value=20.0, value=3.0, step=0.25, key=llave("pct_imp"))
+            pct_hon = a2.number_input("% de honorarios notariales", min_value=0.0, max_value=20.0, value=2.0, step=0.25, key=llave("pct_hon"))
             com_manual = a1.number_input("Comisión manual (decimal, ej. 0.0100)", min_value=0.0, max_value=0.5, value=0.0,
-                                         step=0.0005, format="%.4f", key="com_manual", help="Déjala en 0 para usar la del producto.")
+                                         step=0.0005, format="%.4f", key=llave("com_manual"), help="Déjala en 0 para usar la del producto.")
             valor_dest = a2.number_input("Valor de la construcción (destructible)", min_value=0.0, value=0.0, step=50_000.0,
-                                         key="valor_dest", help="Construcción + instalaciones especiales, sin terreno. Para el seguro de daños.")
-            seg_ext = a1.toggle("Tengo mis propios seguros", key="seg_ext")
+                                         key=llave("valor_dest"), help="Construcción + instalaciones especiales, sin terreno. Para el seguro de daños.")
+            seg_ext = a1.toggle("Tengo mis propios seguros", key=llave("seg_ext"))
             gastos_exactos = 0.0
             if producto in (3, 7):
-                gastos_exactos = a2.number_input("Gastos exactos del Infonavit", min_value=0.0, value=0.0, step=1_000.0, key="gastos_exactos")
-            zona = a2.selectbox("¿Dónde está el inmueble? (informativo)", ["metro", "resto"], key="zona",
+                gastos_exactos = a2.number_input("Gastos exactos del Infonavit", min_value=0.0, value=0.0, step=1_000.0, key=llave("gastos_exactos"))
+            zona = a2.selectbox("¿Dónde está el inmueble? (informativo)", ["metro", "resto"], key=llave("zona"),
                                 format_func=lambda z: "CDMX, Guadalajara o Monterrey" if z == "metro" else "Resto del país")
             lugar_credito_solicitado = st.container()
 
@@ -295,15 +305,15 @@ with vista_calc:
     if principal > 0 and modo in ("valor", "ingresos"):
         maximo = credito.calcular_credito(monto=monto, modo=modo_motor, **datos_calculo)["credito_maximo"]
         with lugar_credito_solicitado:
-            if st.checkbox("Quiero pedir un crédito distinto al máximo", key="pedir_menos"):
+            if st.checkbox("Quiero pedir un crédito distinto al máximo", key=llave("pedir_menos")):
                 credito_solicitado = st.number_input("Crédito solicitado", min_value=0.0, value=float(round(maximo, 2)),
-                                                     step=10_000.0, format="%.2f", key="cred_sol",
+                                                     step=10_000.0, format="%.2f", key=llave("cred_sol"),
                                                      help="Aquí puede capturar el monto del crédito que desee.")
 
     hay_calculo = principal > 0
     if hay_calculo:
         r = credito.calcular_credito(monto=monto, modo=modo_motor, credito_solicitado=credito_solicitado, **datos_calculo)
-        reducir = st.session_state.get("reducir") or "plazo"
+        reducir = st.session_state.get(llave("reducir")) or "plazo"
         tabla = amortizacion.generar_tabla(fecha_calculo=fecha, prepagos=st.session_state.prepagos,
                                            reducir=reducir, **r["datos_tabla"])
         ind = indicadores.calcular_indicadores(r, tabla, fecha) if r["credito_para_tabla"] > 0 else None
@@ -491,21 +501,21 @@ with vista_calc:
                     html(aviso("warn", "Con «Pago anticipado» este producto cobra 3 % + IVA sobre cada abono.",
                                "El simulador suma la penalización a tu saldo."))
                 p1, p2, p3, p4 = st.columns([1, 1.4, 1, 1.6])
-                llave_mes = "prep_mes_{}".format(plazo)            # la llave cambia con el plazo (cambia el máximo)
+                llave_mes = llave("prep_mes_{}".format(plazo))         # la llave cambia con el plazo (cambia el máximo)
                 p1.number_input("Mes", min_value=1, max_value=plazo * 12, value=24, step=1, key=llave_mes)
-                p2.number_input("Monto extra", min_value=0.0, value=100_000.0, step=10_000.0, key="prep_monto")
-                p3.button("+ Agregar", on_click=agregar_prepago, args=(llave_mes,))
-                p4.segmented_control("Al prepagar, reducir:", ["plazo", "pago"], default="plazo", key="reducir",
+                p2.number_input("Monto extra", min_value=0.0, value=100_000.0, step=10_000.0, key=llave("prep_monto"))
+                p3.button("+ Agregar", on_click=agregar_prepago, args=(llave_mes, llave("prep_monto")))
+                p4.segmented_control("Al prepagar, reducir:", ["plazo", "pago"], default="plazo", key=llave("reducir"),
                                      format_func=lambda x: "Plazo" if x == "plazo" else "Pago")
                 for mes_p, monto_p in sorted(st.session_state.prepagos.items()):
                     q1, q2 = st.columns([4, 1])
                     q1.write("Mes {} · {}".format(mes_p, money(monto_p)))
-                    q2.button("Quitar", key="quitar_{}".format(mes_p), on_click=quitar_prepago, args=(mes_p,))
+                    q2.button("Quitar", key=llave("quitar_{}".format(mes_p)), on_click=quitar_prepago, args=(mes_p,))
 
             v1, v2 = st.columns([1, 1])
-            vista = v1.segmented_control("Vista", ["Mensual", "Resumen anual"], default="Mensual", key="vista",
+            vista = v1.segmented_control("Vista", ["Mensual", "Resumen anual"], default="Mensual", key=llave("vista"),
                                          label_visibility="collapsed") or "Mensual"
-            secundarias = v2.checkbox("Mostrar columnas secundarias (6)", key="secundarias")
+            secundarias = v2.checkbox("Mostrar columnas secundarias (6)", key=llave("secundarias"))
 
             if vista == "Mensual":
                 columnas = ["Mes", "Fecha de pago", "Saldo inicial", "Pago", "Interés", "Amortización", "Tasa anual",
@@ -539,7 +549,7 @@ with vista_calc:
             # ¿Por qué? de un mes
             html('<div class="am-step" style="font-size:18px">¿De dónde sale cada número?</div>')
             mes_q = st.number_input("Elige un mes de la tabla", min_value=1, max_value=len(tabla), value=1, step=1,
-                                    key="mes_porque_{}".format(len(tabla)))
+                                    key=llave("mes_porque_{}".format(len(tabla))))
             explicaciones = extras.explicar_mes(tabla, r, int(mes_q))
             e1, e2 = st.columns(2)
             for k, e in enumerate(explicaciones):
@@ -568,7 +578,7 @@ with vista_calc:
         # --------------------------------------------------------- PLANEA TUS PAGOS
         with pes_planea:
             herramienta = st.segmented_control("Herramienta", ["Terminar antes", "Pagar menos por un tiempo"],
-                                               default="Terminar antes", key="herramienta",
+                                               default="Terminar antes", key=llave("herramienta"),
                                                label_visibility="collapsed") or "Terminar antes"
 
             if herramienta == "Terminar antes":
@@ -581,14 +591,14 @@ with vista_calc:
                 else:
                     m1, m2 = st.columns([1, 1.3])
                     anios_meta = m1.select_slider("¿En cuántos años quieres terminar?", opciones_anios,
-                                                  value=15 if 15 in opciones_anios else opciones_anios[-1], key="meta_anios")
-                    forma = m2.radio("¿Cómo quieres lograrlo?", ["unico", "mensual"], horizontal=True, key="meta_modo",
+                                                  value=15 if 15 in opciones_anios else opciones_anios[-1], key=llave("meta_anios"))
+                    forma = m2.radio("¿Cómo quieres lograrlo?", ["unico", "mensual"], horizontal=True, key=llave("meta_modo"),
                                      format_func=lambda f: "Un solo pago extra" if f == "unico" else "Un poco más cada mes")
                     mes_extra = 24
                     if forma == "unico":
                         tope_mes = anios_meta * 12 - 1
                         mes_extra = m1.number_input("¿En qué mes harías el pago extra?", min_value=1, max_value=tope_mes,
-                                                    value=min(24, tope_mes), step=1, key="meta_mes_{}".format(anios_meta))
+                                                    value=min(24, tope_mes), step=1, key=llave("meta_mes_{}".format(anios_meta)))
                         m1.caption("= al cumplir {}".format(anios_meses(mes_extra)))
                     if cobra_pena:
                         m2.html(aviso("warn", "Cada abono paga 3 % + IVA de penalización",
@@ -650,21 +660,21 @@ with vista_calc:
                 g1, g2, g3, g4 = st.columns(4)
                 tope_D = max(100.0, float(mes1["Pago"]))
                 D = g1.number_input("¿Cuánto menos al mes?", min_value=100.0, max_value=tope_D,
-                                    value=min(3_000.0, tope_D), step=500.0, key="pm_D_{:.0f}".format(tope_D))
+                                    value=min(3_000.0, tope_D), step=500.0, key=llave("pm_D_{:.0f}".format(tope_D)))
                 tope_a = max(2, len(tabla) - 2)
                 a = g2.number_input("¿Desde qué mes?", min_value=2, max_value=tope_a, value=min(13, tope_a), step=1,
-                                    key="pm_a_{}".format(len(tabla)))
+                                    key=llave("pm_a_{}".format(len(tabla))))
                 tope_n = max(1, len(tabla) - int(a))
                 n = g3.number_input("¿Durante cuántos meses?", min_value=1, max_value=tope_n, value=min(24, tope_n), step=1,
-                                    key="pm_n_{}_{}".format(len(tabla), int(a)))
-                m = g4.number_input("Si lo repartes, ¿en cuántos meses?", min_value=1, max_value=240, value=24, step=1, key="pm_m")
+                                    key=llave("pm_n_{}_{}".format(len(tabla), int(a))))
+                m = g4.number_input("Si lo repartes, ¿en cuántos meses?", min_value=1, max_value=240, value=24, step=1, key=llave("pm_m"))
                 pm = extras.pagar_menos(D, int(a), int(n), int(m), r["tasa"], con_penalizacion=cobra_pena)
                 b = int(a + n - 1)
                 if b + m > len(tabla):
                     html(aviso("warn", "El reparto termina después de tu último pago",
                                "Tu crédito acaba en el mes {}; elige menos meses.".format(len(tabla))))
 
-                opcion = st.segmented_control("Opción", ["A", "B", "C"], default="A", key="pm_opt",
+                opcion = st.segmented_control("Opción", ["A", "B", "C"], default="A", key=llave("pm_opt"),
                                               format_func={"A": "A · Abonar antes", "B": "B · Pagar después",
                                                            "C": "C · Repartir después"}.get) or "A"
                 tarjetas = [
