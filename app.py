@@ -801,6 +801,7 @@ with vista_info:
              + fila("Institución", "Facultad de Estudios Superiores Acatlán (UNAM)")
              + fila("Profesor", "Arturo Vera Moreno")
              + fila("Semestre", "2027-I")
-             + fila("Integrantes", "[NOMBRES DEL EQUIPO]")
+             + fila("Integrantes", "Cruz Salazar Alejandra<br>Escobar Enriquez Camila<br>Espinoza De la O Mounserrath<br>"
+                    "Salazar Jimenez Astrid Celic<br>Velazquez Contreras Javier")
              + '<p style="margin-top:14px;font-weight:700">El núcleo replica el simulador al centavo; las funcionalidades adicionales '
                'son capas de análisis que usan el mismo motor, sin modificar los resultados validados.</p></div>')
