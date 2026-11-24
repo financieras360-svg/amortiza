@@ -19,6 +19,8 @@ Regla de oro:
     la validación contra el Excel sigue siendo válida.
 """
 
+import pandas as pd
+
 import amortizacion
 import credito
 import parametros
@@ -378,6 +380,49 @@ PROGRAMA = {1: "CREDIRESIDENCIAL", 2: "CREDIRESIDENCIAL", 3: "CREDIRESIDENCIAL",
 def reca(producto, esquema, con_conyuge):
     clave = "{}-{}-{}".format(producto, 1 if esquema == "Valora" else 2, 2 if con_conyuge else 1)
     return clave, RECAS.get(clave)
+
+
+# =============================================================================
+# 8. "¿Y SI LA TASA FUERA...?" (simulador con la fórmula del curso)
+# =============================================================================
+# ? Esto NO es el cálculo del Excel: el banco usa su pago al millar, días reales
+# ? / 360 y bajadas de tasa. Aquí el usuario escribe CUALQUIER tasa y se usa la
+# ? anualidad vencida del curso, con i = tasa anual / 12. La cotización no cambia.
+#
+# * R = C · i / (1 - (1+i)^-n)      (pago fijo de una anualidad vencida)
+# * I_k = S_(k-1) · i     A_k = R - I_k     S_k = S_(k-1) - A_k
+
+def simular_tasa(credito_monto, tasa_anual, plazo_meses):
+    """Tabla con pago fijo para una tasa elegida por el usuario."""
+    i = tasa_anual / 12
+    n = int(plazo_meses)
+    if i == 0:
+        pago = credito_monto / n          # sin interés: solo se reparte el crédito
+    else:
+        pago = credito_monto * i / (1 - (1 + i) ** -n)
+
+    filas = []
+    saldo = credito_monto
+    for mes in range(1, n + 1):
+        interes = saldo * i
+        amortizacion_mes = pago - interes
+        saldo_final = saldo - amortizacion_mes
+        if mes == n:                      # el último mes elimina residuos de redondeo
+            saldo_final = 0.0
+        filas.append({"Mes": mes, "Saldo inicial": saldo, "Interés": interes,
+                      "Pago": pago, "Amortización": amortizacion_mes, "Saldo final": saldo_final})
+        saldo = saldo_final
+
+    tabla = pd.DataFrame(filas)
+    return {
+        "i": i,
+        "n": n,
+        "pago": pago,
+        "pago_al_millar": pago / credito_monto * 1000,
+        "intereses": tabla["Interés"].sum(),
+        "total_pagado": pago * n,
+        "tabla": tabla,
+    }
 
 
 # =============================================================================

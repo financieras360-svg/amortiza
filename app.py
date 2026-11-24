@@ -562,7 +562,7 @@ with vista_calc:
 
         # --------------------------------------------------------- PLANEA TUS PAGOS
         with pes_planea:
-            herramienta = st.segmented_control("Herramienta", ["Terminar antes", "Pagar menos por un tiempo"],
+            herramienta = st.segmented_control("Herramienta", ["Terminar antes", "Pagar menos por un tiempo", "Otra tasa"],
                                                default="Terminar antes", key=llave("herramienta"),
                                                label_visibility="collapsed") or "Terminar antes"
 
@@ -638,7 +638,7 @@ with vista_calc:
                     else:
                         st.info("Con esa meta ya terminas a tiempo.")
 
-            else:  # Pagar menos por un tiempo
+            elif herramienta == "Pagar menos por un tiempo":
                 html(aviso("info", "Tu cotización no cambia · Ecuación de valor",
                            "Para bajar tu mensualidad una temporada, lo que dejas de pagar debe valer lo mismo, "
                            "en una fecha focal, que lo que pagas para compensarlo."))
@@ -700,6 +700,72 @@ with vista_calc:
                     st.caption("Se usa la tasa nominal mensual del curso (tasa ÷ 12). El banco calcula con días reales / 360 y "
                                "bajadas de tasa, por eso en la tabla puede variar unos pesos. Pagar menos requiere un convenio "
                                "con el banco; aquí solo se mide su costo.")
+
+            else:  # Otra tasa
+                html(aviso("info", "Tu cotización no cambia · Simulador del curso",
+                           "Escribe cualquier tasa y mira cómo cambiaría tu mensualidad con la fórmula de anualidad "
+                           "vista en clase. La cotización de arriba sigue siendo la del Excel."))
+                o1, o2, o3 = st.columns(3)
+                tasa_usuario = o1.number_input("Tasa anual (%)", min_value=0.0, max_value=60.0,
+                                               value=round(r["tasa"] * 100, 2), step=0.25, format="%.2f",
+                                               key=llave("ot_tasa"))
+                credito_ot = o2.number_input("Crédito", min_value=10_000.0, max_value=50_000_000.0,
+                                             value=float(round(r["credito_para_tabla"], 2)), step=50_000.0,
+                                             format="%.2f", key=llave("ot_credito_{:.0f}".format(r["credito_para_tabla"])))
+                plazo_ot = o3.selectbox("Plazo", [5, 7, 10, 15, 20, 25, 30], index=[5, 7, 10, 15, 20, 25, 30].index(plazo),
+                                        format_func=lambda a: "{} años".format(a), key=llave("ot_plazo_{}".format(plazo)))
+
+                tuya = extras.simular_tasa(credito_ot, tasa_usuario / 100, plazo_ot * 12)
+                banco = extras.simular_tasa(credito_ot, r["tasa"], plazo_ot * 12)
+                diferencia = tuya["pago"] - banco["pago"]
+                if abs(diferencia) < 0.005:
+                    comparacion = "Es la misma tasa con la que empieza tu cotización."
+                else:
+                    comparacion = "Son <b>{}</b> {} al mes que con la tasa inicial del banco ({}).".format(
+                        money(abs(diferencia)), "más" if diferencia > 0 else "menos", pct(r["tasa"]))
+                html('<div class="am-result"><div class="eyebrow">Con una tasa de {}</div>'
+                     '<p class="sentence" style="font-size:17px">Por un crédito de <b>{}</b> a {} años, pagarías '
+                     '<b>{}</b> al mes (sin seguros). {}</p>'
+                     '<div class="am-kpis"><div><b>{}</b><span>Mensualidad</span></div>'
+                     '<div><b>{}</b><span>Pago al millar equivalente</span></div>'
+                     '<div><b>{}</b><span>Intereses en total</span></div></div></div>'.format(
+                         pct(tasa_usuario / 100), money(credito_ot, 0), plazo_ot, money(tuya["pago"]), comparacion,
+                         money(tuya["pago"]), num(tuya["pago_al_millar"]), money(tuya["intereses"], 0)))
+
+                def saldos_anuales(t):
+                    return [t.iloc[12 * a - 1]["Saldo final"] for a in range(1, len(t) // 12 + 1)]
+                html('<div class="am-card" style="margin-top:14px"><h4>Lo que te falta por pagar, año con año</h4>{}</div>'.format(
+                    svg_saldos([("Tasa del banco · {}".format(pct(r["tasa"])), "#333333", saldos_anuales(banco["tabla"])),
+                                ("Tu tasa · {}".format(pct(tasa_usuario / 100)), "#EC111A", saldos_anuales(tuya["tabla"]))])))
+
+                lado = [("Tasa anual", pct(r["tasa"]), pct(tasa_usuario / 100)),
+                        ("Mensualidad (sin seguros)", money(banco["pago"]), money(tuya["pago"])),
+                        ("Intereses en total", money(banco["intereses"]), money(tuya["intereses"])),
+                        ("Total pagado", money(banco["total_pagado"]), money(tuya["total_pagado"]))]
+                html('<div class="am-card" style="margin-top:14px"><h4>Lado a lado (misma fórmula del curso)</h4>' +
+                     '<div class="am-row" style="font-weight:700"><span>&nbsp;</span><span>Tasa del banco · Tu tasa</span></div>' +
+                     "".join('<div class="am-row"><span>{}</span><span>{} · <b style="color:#C70E17">{}</b></span></div>'.format(*f) for f in lado) +
+                     "</div>")
+
+                with st.expander("¿Cómo se calcula? (anualidad vencida)", expanded=True):
+                    i_ot = tuya["i"]
+                    st.latex(r"i = \frac{{{}}}{{12}} = {:.6f} \qquad n = {} \text{{ meses}}".format(
+                        pct(tasa_usuario / 100).replace(" %", r"\%"), i_ot, tuya["n"]))
+                    if i_ot > 0:
+                        st.latex(r"R = \frac{{C\,i}}{{1-(1+i)^{{-n}}}} = \frac{{{}\cdot {:.6f}}}{{1-(1+{:.6f})^{{-{}}}}} = \${}".format(
+                            tex_num(credito_ot), i_ot, i_ot, tuya["n"], tex_num(tuya["pago"])))
+                    else:
+                        st.latex(r"R = \frac{{C}}{{n}} = \${}".format(tex_num(tuya["pago"])))
+                    st.latex(r"I_k = S_{k-1}\,i \qquad A_k = R - I_k \qquad S_k = S_{k-1} - A_k")
+                    st.caption("Este simulador usa la tasa nominal mensual del curso (tasa ÷ 12) y una tasa fija. La cotización "
+                               "del banco usa su pago al millar, días reales / 360 y bajadas de tasa, por eso su mensualidad "
+                               "({} sin seguros) no es igual a la de esta fórmula aunque la tasa sea la misma.".format(
+                                   money(mes1["Pago"])))
+
+                with st.expander("Ver la tabla con tu tasa"):
+                    st.dataframe(tuya["tabla"].style.format({c: "{:,.2f}" for c in
+                                                            ["Saldo inicial", "Interés", "Pago", "Amortización", "Saldo final"]}),
+                                 hide_index=True, use_container_width=True)
 
         # --------------------------------------------------------- CARÁTULA
         with pes_caratula:
