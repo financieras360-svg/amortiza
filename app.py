@@ -77,21 +77,6 @@ PRODUCTO_DE = {
     "liquidez": {"normal": 6},
 }
 
-# Hallazgos del Excel que replicamos tal cual (mismos números que en credito.py)
-HALLAZGOS = [
-    ("H1", "Aforo de montos altos", "La fórmula revisa la celda I21, que está vacía (y compara contra 150,000,000); siempre se usa el aforo de créditos hasta 10 millones."),
-    ("H2", "Avalúo «30,000,001 a 30,000,000»", "Error de texto en la tabla de avalúos; no afecta porque esa columna no se usa."),
-    ("H3", "Celda D29 con 1,568,700", "Número suelto sin uso en ninguna fórmula."),
-    ("H4", "Valora con campaña y nivel mayor a 1", "El Excel deja la tasa en blanco; usamos el único renglón de la campaña para todos los niveles."),
-    ("H5", "Pagos Oportunos siempre con nivel 1", "La lista de niveles solo trae una opción en PO."),
-    ("H6", "CI+CB solo para independientes", "El producto 7 fija la actividad en «Independiente»."),
-    ("H7", "El máximo del producto no se valida", "Ni 15 M ni 2.5 M (Liquidez) bloquean el cálculo; solo en modo monto aparece el aviso «debe ser igual al máximo»."),
-    ("H8", "Macros", "Solo navegan e imprimen; no calculan."),
-    ("H9", "Valor mínimo por zona", "La política distingue CDMX/GDL/MTY del resto del país, pero el simulador siempre usa la cifra de las tres ciudades."),
-    ("H10", "Máximo de 15 M contra 8 M", "La hoja de políticas dice 8 M; el simulador permite 15 M (7 M con nivel R)."),
-    ("H11", "Gastos financiados sin tope", "En pasivos, el tope de los gastos financiados solo se revisa al calcular por valor."),
-]
-
 
 # =============================================================================
 # 1. FUNCIONES DE APOYO PARA LA PANTALLA
@@ -755,8 +740,8 @@ with vista_calc:
 # #############################################################################
 with vista_info:
     st.markdown("## Más información")
-    st.caption("Las palabras clave sin tecnicismos, la teoría del curso detrás de cada número, los hallazgos del Excel y los datos del proyecto.")
-    glosario, formulas, notas, acerca = st.tabs(["01 · Glosario", "02 · Fórmulas del curso", "03 · Notas técnicas", "04 · Acerca del proyecto"])
+    st.caption("Las palabras clave sin tecnicismos, la teoría del curso detrás de cada número y los datos del proyecto.")
+    glosario, formulas, acerca = st.tabs(["01 · Glosario", "02 · Fórmulas del curso", "03 · Acerca del proyecto"])
 
     with glosario:
         terminos = [
@@ -788,12 +773,6 @@ with vista_info:
         st.markdown("**Meta de liquidación** — el abono vale lo mismo que las mensualidades que te ahorras.")
         st.latex(r"P = R\,a_{\overline{n}|} + X\,v^{k} \;\Rightarrow\; X = R\,v^{\,n-k}\,a_{\overline{N-n}|}")
         st.info("Ejemplo del curso: i = 10 %, R = 100, N = 5, n = 3, k = 1  ⇒  X = 100·(1.10)⁻²·a₂ = 143.43")
-
-    with notas:
-        st.caption("Replicamos el Excel tal cual. Cada hallazgo aparece comentado en el código (# ! HALLAZGO) donde ocurre.")
-        html('<div class="am-grid3">' + "".join(
-            '<div class="am-card"><h4>{} · {}</h4><p style="font-size:13.5px;color:#6A6A6A;margin:6px 0 0">{}</p></div>'.format(h, t, d)
-            for h, t, d in HALLAZGOS) + "</div>")
 
     with acerca:
         html('<div class="am-card" style="max-width:720px">'
