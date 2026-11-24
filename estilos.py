@@ -15,6 +15,7 @@ ASPECTO VISUAL DE LA CALCULADORA (no calcula nada)
 """
 
 from html import escape          # convierte < > & en texto seguro para HTML
+import base64                    # para mandar las gráficas como imagen
 
 
 # =============================================================================
@@ -221,6 +222,21 @@ def paso(numero, texto):
 # 4. GRÁFICAS EN SVG (dibujadas aquí mismo, sin librerías)
 # =============================================================================
 
+def como_imagen(svg):
+    """
+    Streamlit limpia el HTML de st.html y borra las etiquetas <svg>. Por eso cada
+    gráfica se manda como una imagen (<img>) que lleva el SVG adentro (base64).
+    """
+    # La imagen necesita su tamaño en números: lo tomamos del viewBox ("0 0 ancho alto").
+    inicio = svg.index('viewBox="') + len('viewBox="')
+    _, _, ancho, alto = svg[inicio:svg.index('"', inicio)].split()
+    svg = svg.replace(' width="100%"', "", 1)
+    svg = svg.replace("<svg ", '<svg xmlns="http://www.w3.org/2000/svg" width="{}" height="{}" '
+                      'font-family="Source Sans Pro, Helvetica, Arial, sans-serif" '.format(ancho, alto), 1)
+    codigo = base64.b64encode(svg.encode("utf-8")).decode("ascii")
+    return '<img src="data:image/svg+xml;base64,{}" style="width:100%;height:auto;display:block" alt="">'.format(codigo)
+
+
 def svg_saldos(series, ancho=760, alto=280):
     """
     Gráfica de líneas del saldo al final de cada año.
@@ -238,7 +254,7 @@ def svg_saldos(series, ancho=760, alto=280):
         return arr + h - h * v / maximo
 
     partes = ['<svg viewBox="0 0 {} {}" width="100%" role="img" aria-label="Saldo por año" '
-              'style="font-family:inherit">'.format(ancho, alto)]
+              '>'.format(ancho, alto)]
     for k in range(5):                                       # líneas guía
         v = maximo * k / 4
         partes.append('<line x1="{}" x2="{}" y1="{:.1f}" y2="{:.1f}" stroke="#E6E6E6"/>'.format(izq, ancho - der, y(v), y(v)))
@@ -256,7 +272,7 @@ def svg_saldos(series, ancho=760, alto=280):
         partes.append('<text x="{}" y="17" font-size="12" fill="#333">{}</text>'.format(leyenda_x + 18, escape(nombre)))
         leyenda_x += 40 + 7 * len(nombre)
     partes.append("</svg>")
-    return "".join(partes)
+    return como_imagen("".join(partes))
 
 
 def svg_barra_tiempo(meses_total, plazo_meses, marcas, ancho=760, alto=74):
@@ -280,7 +296,7 @@ def svg_barra_tiempo(meses_total, plazo_meses, marcas, ancho=760, alto=74):
     p.append('<text x="{}" y="62" font-size="12" fill="#6A6A6A" text-anchor="end">Plazo contratado: {} años</text>'.format(
         ancho - der, plazo_meses // 12))
     p.append("</svg>")
-    return "".join(p)
+    return como_imagen("".join(p))
 
 
 def svg_planes(pago_normal, filas, ancho=760):
@@ -315,4 +331,4 @@ def svg_planes(pago_normal, filas, ancho=760):
         p.append('<text x="{:.1f}" y="{}" font-size="10" fill="#6A6A6A" text-anchor="middle">{}</text>'.format(
             x(a), alto - 4, "mes {}".format(a)))
     p.append("</svg>")
-    return "".join(p)
+    return como_imagen("".join(p))
